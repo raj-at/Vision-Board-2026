@@ -1,10 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { BoardBlueprint, PinItem, PinColor, CardColor } from '../types';
-import { useDraggable } from '../hooks/useDraggable'; // Simple custom hook or Framer Motion
-import { Trash2, RefreshCw, Edit3, Lock, Unlock, Download, FileText, Plus } from 'lucide-react';
+import { Trash2, RefreshCw, Download, Plus, ChevronDown, FileText, Image as ImageIcon, File } from 'lucide-react';
 import { generateVisionImage, regenerateCardContent } from '../geminiService';
 import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface PinBoardProps {
   blueprint: BoardBlueprint;
@@ -18,14 +18,16 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
   const [items, setItems] = useState<PinItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // Initial Layout Generation
   useEffect(() => {
     const newItems: PinItem[] = [];
-    const layoutStyle = 'messy'; // Can be derived from answers
+    const layoutStyle = 'messy';
     
-    // Add Identity Statements
     blueprint.identity_statements.forEach((stmt, i) => {
       newItems.push({
         id: `identity-${i}`,
@@ -41,12 +43,10 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
       });
     });
 
-    // Add Category Cards
     blueprint.categories.forEach((cat, idx) => {
       const startX = 100 + (idx % 3) * 350;
       const startY = 300 + Math.floor(idx / 3) * 450;
 
-      // Vision Card
       newItems.push({
         id: `vision-${cat.id || idx}`,
         type: 'vision',
@@ -62,7 +62,6 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
         height: 120
       });
 
-      // Plan/Habit Card
       newItems.push({
         id: `habit-${cat.id || idx}`,
         type: 'habit',
@@ -77,7 +76,6 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
         height: 160
       });
 
-      // Image Placeholder (Will be filled by generation)
       newItems.push({
         id: `image-${cat.id || idx}`,
         type: 'image',
@@ -96,7 +94,6 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
 
     setItems(newItems);
     
-    // Auto-generate images on mount if not present
     const generateAll = async () => {
       setIsGeneratingImages(true);
       const updatedItems = [...newItems];
@@ -113,13 +110,63 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
     generateAll();
   }, [blueprint]);
 
-  const handleExport = async () => {
-    if (!boardRef.current) return;
-    const canvas = await html2canvas(boardRef.current, { scale: 2 });
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const captureCanvas = async () => {
+    if (!boardRef.current) return null;
+    setIsExporting(true);
+    setSelectedId(null); // Deselect before capture
+    
+    // Give a small delay for re-rendering without the selection ring
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const canvas = await html2canvas(boardRef.current, { 
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#2d5a27', // Matching pinboard-texture
+      scrollX: 0,
+      scrollY: 0,
+      width: boardRef.current.scrollWidth,
+      height: boardRef.current.scrollHeight,
+    });
+    
+    setIsExporting(false);
+    return canvas;
+  };
+
+  const handleExportImage = async (format: 'png' | 'jpeg') => {
+    const canvas = await captureCanvas();
+    if (!canvas) return;
+    
     const link = document.createElement('a');
-    link.download = `${blueprint.board_title.replace(/\s+/g, '_')}_2026.png`;
-    link.href = canvas.toDataURL();
+    link.download = `${blueprint.board_title.replace(/\s+/g, '_')}_2026.${format}`;
+    link.href = canvas.toDataURL(`image/${format}`, 1.0);
     link.click();
+    setShowExportMenu(false);
+  };
+
+  const handleExportPDF = async () => {
+    const canvas = await captureCanvas();
+    if (!canvas) return;
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pdf = new jsPDF({
+      orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [canvas.width, canvas.height]
+    });
+
+    pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+    pdf.save(`${blueprint.board_title.replace(/\s+/g, '_')}_2026.pdf`);
+    setShowExportMenu(false);
   };
 
   const updateItem = (id: string, updates: Partial<PinItem>) => {
@@ -143,20 +190,62 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Header / Toolbar */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center z-50">
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center z-50 shadow-sm">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{blueprint.board_title}</h1>
           <p className="text-sm text-gray-500 italic">Vision for 2026</p>
         </div>
         <div className="flex gap-2">
+          <div className="relative" ref={exportMenuRef}>
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95"
+              disabled={isExporting}
+            >
+              <Download size={18} /> {isExporting ? 'Preparing...' : 'Export'} <ChevronDown size={14} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-[60] py-2 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                <button 
+                  onClick={() => handleExportImage('png')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 transition-colors text-left"
+                >
+                  <ImageIcon size={16} className="text-indigo-500" /> Save as PNG
+                </button>
+                <button 
+                  onClick={() => handleExportImage('jpeg')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 transition-colors text-left"
+                >
+                  <ImageIcon size={16} className="text-emerald-500" /> Save as JPG
+                </button>
+                <div className="border-t border-gray-50 my-1"></div>
+                <button 
+                  onClick={handleExportPDF}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 transition-colors text-left"
+                >
+                  <FileText size={16} className="text-rose-500" /> Export to PDF
+                </button>
+              </div>
+            )}
+          </div>
           <button 
-            onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-          >
-            <Download size={18} /> Export PNG
-          </button>
-          <button 
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors active:scale-95"
+            onClick={() => {
+              const newItem: PinItem = {
+                id: `note-${Date.now()}`,
+                type: 'quote',
+                content: 'New Inspiration...',
+                x: 150,
+                y: 150,
+                rotation: Math.random() * 10 - 5,
+                pinColor: 'yellow',
+                cardColor: 'pastel-yellow',
+                width: 180,
+                height: 120
+              };
+              setItems(prev => [...prev, newItem]);
+            }}
           >
             <Plus size={18} /> Add Note
           </button>
@@ -164,7 +253,6 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Main Board Area */}
         <main 
           ref={boardRef}
           className="flex-1 pinboard-texture overflow-auto relative p-20 cursor-grab active:cursor-grabbing"
@@ -190,26 +278,25 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
           )}
         </main>
 
-        {/* Sidebar Editor */}
         {selectedId && (
-          <aside className="w-80 bg-white border-l border-gray-200 p-6 z-50 shadow-2xl overflow-y-auto">
+          <aside className="w-80 bg-white border-l border-gray-200 p-6 z-50 shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-300">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold">Edit Item</h2>
-              <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-600">×</button>
+              <h2 className="text-lg font-bold text-gray-800">Card Editor</h2>
+              <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100">×</button>
             </div>
 
             <div className="space-y-6">
               {items.find(i => i.id === selectedId)?.type !== 'image' && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Text Content</label>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Message</label>
                   <textarea 
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg h-32 text-sm"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg h-32 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                     value={items.find(i => i.id === selectedId)?.content || ''}
                     onChange={(e) => updateItem(selectedId, { content: e.target.value })}
                   />
                   <div className="mt-2 flex flex-wrap gap-1">
-                    <button onClick={() => handleRegenerate(selectedId)} className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 flex items-center gap-1">
-                      <RefreshCw size={10} /> AI Refine
+                    <button onClick={() => handleRegenerate(selectedId)} className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1.5 rounded-lg hover:bg-indigo-100 flex items-center gap-1 font-bold">
+                      <RefreshCw size={10} /> AI Polish
                     </button>
                   </div>
                 </div>
@@ -217,54 +304,54 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
 
               {items.find(i => i.id === selectedId)?.type === 'image' && (
                 <div>
-                   <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Image Prompt</label>
-                   <p className="text-xs text-gray-500 mb-2 italic">"{items.find(i => i.id === selectedId)?.content}"</p>
+                   <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Image Concept</label>
+                   <p className="text-xs text-gray-500 mb-3 italic">"{items.find(i => i.id === selectedId)?.content}"</p>
                    <button 
                     onClick={() => handleRegenerate(selectedId)}
-                    className="w-full py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:bg-emerald-100"
+                    className="w-full py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors"
                    >
-                     <RefreshCw size={14} /> Regenerate Image
+                     <RefreshCw size={14} /> Redesign Visual
                    </button>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Card Style</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Card Paper</label>
                 <div className="grid grid-cols-3 gap-2">
                   {CARD_COLORS.map(color => (
                     <button 
                       key={color}
                       onClick={() => updateItem(selectedId, { cardColor: color })}
-                      className={`h-8 rounded border ${items.find(i => i.id === selectedId)?.cardColor === color ? 'border-black ring-1 ring-black' : 'border-gray-200'}`}
-                      style={{ backgroundColor: color.startsWith('pastel') ? `var(--${color})` : color === 'cream' ? '#FFFDD0' : 'white' }}
+                      className={`h-10 rounded-lg border transition-all ${items.find(i => i.id === selectedId)?.cardColor === color ? 'border-indigo-600 ring-2 ring-indigo-100' : 'border-gray-200 hover:border-gray-300'}`}
+                      style={{ backgroundColor: color === 'cream' ? '#fffde7' : color === 'white' ? 'white' : color === 'pastel-blue' ? '#eff6ff' : color === 'pastel-green' ? '#f0fdf4' : color === 'pastel-pink' ? '#fdf2f8' : '#fefce8' }}
                     />
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Pin Color</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Pushpin Color</label>
                 <div className="flex gap-2">
                   {PIN_COLORS.map(color => (
                     <button 
                       key={color}
                       onClick={() => updateItem(selectedId, { pinColor: color })}
-                      className={`w-6 h-6 rounded-full shadow-inner ${items.find(i => i.id === selectedId)?.pinColor === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
+                      className={`w-8 h-8 rounded-full shadow-inner transition-all active:scale-90 ${items.find(i => i.id === selectedId)?.pinColor === color ? 'ring-2 ring-offset-2 ring-indigo-500' : 'hover:scale-110'}`}
                       style={{ backgroundColor: color }}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-gray-100 flex gap-2">
+              <div className="pt-6 border-t border-gray-100">
                 <button 
                   onClick={() => {
                     setItems(prev => prev.filter(i => i.id !== selectedId));
                     setSelectedId(null);
                   }}
-                  className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:bg-red-100"
+                  className="w-full py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
                 >
-                  <Trash2 size={14} /> Remove
+                  <Trash2 size={16} /> Discard Item
                 </button>
               </div>
             </div>
@@ -275,7 +362,6 @@ export const PinBoard: React.FC<PinBoardProps> = ({ blueprint, onUpdate }) => {
   );
 };
 
-// Simplified Draggable Component logic
 const BoardItem: React.FC<{ 
   item: PinItem; 
   isSelected: boolean; 
@@ -327,43 +413,43 @@ const BoardItem: React.FC<{
 
   return (
     <div 
-      className={`absolute transition-transform duration-200 select-none group card-rough-edge ${isSelected ? 'ring-2 ring-indigo-500 z-40' : 'hover:z-30'}`}
+      className={`absolute select-none group card-rough-edge ${isSelected ? 'ring-2 ring-indigo-500 z-40' : 'hover:z-30'}`}
       style={{ 
         left: pos.x, 
         top: pos.y, 
         width: item.width, 
         minHeight: item.height,
         transform: `rotate(${item.rotation}deg)`,
-        boxShadow: isSelected ? '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' : '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+        boxShadow: isSelected ? '0 20px 25px -5px rgb(0 0 0 / 0.15), 0 8px 10px -6px rgb(0 0 0 / 0.15)' : '0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.1)'
       }}
       onMouseDown={handleMouseDown}
     >
-      {/* The Pin */}
       <div 
-        className="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full shadow-md z-10"
+        className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full shadow-lg z-10 cursor-move border border-white/20"
         style={{ backgroundColor: item.pinColor }}
-      />
+      >
+         <div className="absolute top-1 left-1 w-1.5 h-1.5 bg-white/40 rounded-full"></div>
+      </div>
       
-      {/* Card Content */}
-      <div className={`p-4 h-full flex flex-col ${getCardColorClass(item.cardColor)}`}>
+      <div className={`p-5 h-full flex flex-col ${getCardColorClass(item.cardColor)}`}>
         {item.type === 'image' ? (
           item.imageUrl ? (
-            <img src={item.imageUrl} alt="Goal" className="w-full h-full object-cover rounded-sm shadow-inner" />
+            <img src={item.imageUrl} alt="Vision Goal" className="w-full h-full object-cover rounded shadow-inner" draggable={false} />
           ) : (
-            <div className="w-full h-full bg-gray-100 animate-pulse flex items-center justify-center">
-              <RefreshCw className="animate-spin text-gray-300" />
+            <div className="w-full h-full bg-gray-50/50 min-h-[150px] flex items-center justify-center">
+              <RefreshCw className="animate-spin text-gray-300" size={32} />
             </div>
           )
         ) : (
-          <div className="flex flex-col h-full">
-            {item.title && <h3 className="text-[10px] font-bold uppercase text-gray-400 mb-1">{item.title}</h3>}
-            <p className={`font-handwriting leading-tight ${item.type === 'identity' ? 'text-lg font-bold' : 'text-sm'}`}>
+          <div className="flex flex-col h-full pointer-events-none">
+            {item.title && <h3 className="text-[10px] font-bold uppercase text-indigo-400 tracking-wider mb-2">{item.title}</h3>}
+            <p className={`font-handwriting leading-tight text-gray-800 ${item.type === 'identity' ? 'text-xl font-bold' : 'text-base'}`}>
               {item.content}
             </p>
             {item.type === 'habit' && (
-              <div className="mt-auto pt-2 border-t border-black/5 flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-[10px] font-bold uppercase">Weekly Habit</span>
+              <div className="mt-auto pt-3 border-t border-black/5 flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm" />
+                <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500">2026 Blueprint Habit</span>
               </div>
             )}
           </div>

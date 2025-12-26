@@ -2,31 +2,35 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserAnswers, BoardBlueprint } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-
+/**
+ * Generates a full strategic blueprint for 2026 based on user interview responses.
+ * Uses Gemini 3 Pro for advanced reasoning and structure generation.
+ */
 export const generateBoardBlueprint = async (answers: UserAnswers): Promise<BoardBlueprint> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `
-    Based on the following user interview for their 2026 Vision Board, generate a comprehensive blueprint.
-    User Interview Data: ${JSON.stringify(answers)}
+    Act as a high-performance life coach and visual designer.
+    Analyze this 2026 Vision Interview: ${JSON.stringify(answers)}
 
-    Requirements:
-    1. A punchy board title.
-    2. 3 core themes and 3 identity statements ("I am...").
-    3. For each category selected, provide:
-       - A vision statement (max 12 words)
-       - A micro plan line (max 14 words)
-       - A weekly habit
-       - A milestone (max 8 words) with a target date in 2026
-       - A detailed image generation prompt for an AI model (nano banana) following the style of "${answers.imageStyle}" and vibe "${answers.visualVibe}".
-       - An optional affirmation/quote (max 12 words).
-    4. A summary paragraph.
-    5. A 5-point action plan for the next 7 days.
+    Tasks:
+    1. Create a compelling, high-status Board Title.
+    2. Extract 3 core themes and 3 powerful "I am" identity statements.
+    3. For each category selected:
+       - Vision: A 10-word aspirational goal.
+       - Plan: A 12-word strategic step.
+       - Habit: A concrete daily/weekly recurring action.
+       - Milestone: A specific deadline-driven event for 2026.
+       - Image Prompt: A high-detail descriptive prompt for Gemini Pro Image. 
+         Focus on ${answers.imageStyle} style, ${answers.visualVibe} vibe, and ${answers.avoidColors ? 'avoiding ' + answers.avoidColors : 'vivid imagery'}.
+       - Affirmation: A short, punchy mantra.
+    4. Provide a holistic summary and a 'Next 7 Days' execution list.
   `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3-pro-preview',
     contents: prompt,
     config: {
+      thinkingConfig: { thinkingBudget: 4000 },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -59,19 +63,24 @@ export const generateBoardBlueprint = async (answers: UserAnswers): Promise<Boar
     }
   });
 
-  return JSON.parse(response.text);
+  return JSON.parse(response.text || "{}");
 };
 
+/**
+ * Generates an aspirational image using the Gemini 3 Pro Image model for 1K resolution.
+ */
 export const generateVisionImage = async (prompt: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3-pro-image-preview',
       contents: {
         parts: [{ text: prompt }]
       },
       config: {
         imageConfig: {
-          aspectRatio: "1:1"
+          aspectRatio: "1:1",
+          imageSize: "1K"
         }
       }
     });
@@ -81,21 +90,32 @@ export const generateVisionImage = async (prompt: string): Promise<string> => {
         return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
       }
     }
-    return 'https://picsum.photos/800/800'; // Fallback
-  } catch (error) {
-    console.error("Image generation failed", error);
-    return 'https://picsum.photos/800/800';
+    return `https://images.unsplash.com/photo-1493612276216-ee3925520721?auto=format&fit=crop&q=80&w=800`;
+  } catch (error: any) {
+    console.error("Image generation error:", error);
+    // If key selection is missing, we might need the user to re-select
+    if (error?.message?.includes("Requested entity was not found")) {
+      console.warn("API key might need re-selection for Pro model.");
+    }
+    return `https://images.unsplash.com/photo-1493612276216-ee3925520721?auto=format&fit=crop&q=80&w=800`;
   }
 };
 
+/**
+ * Rewrites card content using Pro model for better style.
+ */
 export const regenerateCardContent = async (currentContent: string, instruction: string): Promise<string> => {
-  const prompt = `Rewrite the following vision board card text: "${currentContent}". 
-  Instruction for rewrite: ${instruction}. 
-  Keep it under 15 words. Return ONLY the new text.`;
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `
+    Transform this vision board text: "${currentContent}".
+    Target transformation: ${instruction}.
+    Constraint: Under 15 words. High energy. No fluff.
+  `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt
+    model: 'gemini-3-pro-preview',
+    contents: prompt,
+    config: { thinkingConfig: { thinkingBudget: 0 } }
   });
 
   return response.text.trim().replace(/^"|"$/g, '');

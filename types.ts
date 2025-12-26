@@ -41,6 +41,7 @@ export interface UserAnswers {
     support: string;
     priority: number;
     confidence: number;
+    targetDate: string;
   }>;
   weeklyHours: number;
   protectionList: string;
@@ -69,4 +70,5 @@ export interface PinItem {
   width: number;
   height: number;
   category?: string;
+  isLocked?: boolean;
 }

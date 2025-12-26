@@ -14,18 +14,16 @@ const CATEGORIES = [
   "Creativity / Learning", "Home / Environment"
 ];
 
-const VIBES: VisualVibe[] = ['Minimal', 'Cinematic', 'Cozy', 'Luxury', 'Nature', 'Futuristic', 'Street', 'Corporate'];
-const STYLES: ImageStyle[] = ['photoreal', 'illustration', 'collage', 'paper cut', '3D'];
-
 export const Interview: React.FC<InterviewProps> = ({ onComplete }) => {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<UserAnswers>>({
     themeWords: [],
     selectedCategories: [],
     categoryDetails: {},
-    visualVibe: 'Cinematic',
+    visualVibe: 'Minimal',
     imageStyle: 'photoreal',
-    layoutStyle: 'messy'
+    layoutStyle: 'clean',
+    weeklyHours: 5
   });
 
   const updateAnswer = <K extends keyof UserAnswers>(key: K, value: UserAnswers[K]) => {
@@ -36,12 +34,15 @@ export const Interview: React.FC<InterviewProps> = ({ onComplete }) => {
   const handleBack = () => setStep(s => Math.max(0, s - 1));
 
   const isCategoryComplete = answers.selectedCategories?.every(cat => 
-    answers.categoryDetails?.[cat]?.outcome && answers.categoryDetails?.[cat]?.habit
+    answers.categoryDetails?.[cat]?.outcome && 
+    answers.categoryDetails?.[cat]?.habit &&
+    answers.categoryDetails?.[cat]?.why
   );
 
   const steps = [
-    // Step 0: Identity
+    // Step 0: Identity & Theme
     <div key="step-0" className="space-y-6">
+      <h3 className="text-xl font-semibold text-gray-800">Your 2026 Identity</h3>
       <div>
         <label className="block text-lg font-medium text-gray-700 mb-2">If 2026 had a title, what would it be?</label>
         <input 
@@ -87,7 +88,7 @@ export const Interview: React.FC<InterviewProps> = ({ onComplete }) => {
 
     // Step 1: Categories
     <div key="step-1" className="space-y-6">
-      <h3 className="text-xl font-semibold text-gray-800">Select categories relevant to you</h3>
+      <h3 className="text-xl font-semibold text-gray-800">What areas of life are you focusing on?</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {CATEGORIES.map(cat => (
           <button
@@ -110,45 +111,93 @@ export const Interview: React.FC<InterviewProps> = ({ onComplete }) => {
       </div>
     </div>,
 
-    // Step 2: Adaptive Category Questions (simplified for MVP, would normally loop)
+    // Step 2: Adaptive Category Questions
     <div key="step-2" className="space-y-8 max-h-[60vh] overflow-y-auto px-2">
+      <h3 className="text-xl font-semibold text-gray-800">Let's go deeper into your choices</h3>
       {answers.selectedCategories?.map(cat => (
-        <div key={cat} className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm space-y-4">
-          <h4 className="text-lg font-bold text-indigo-600">{cat}</h4>
-          <div>
-            <label className="text-sm font-medium text-gray-500 mb-1 block">What's your #1 outcome for {cat}?</label>
-            <input 
-              type="text" 
-              className="w-full px-3 py-2 rounded-lg border border-gray-200"
-              placeholder="Your vision..."
-              value={answers.categoryDetails?.[cat]?.outcome || ''}
-              onChange={e => {
-                const details = { ...answers.categoryDetails };
-                details[cat] = { ...(details[cat] || {}), outcome: e.target.value } as any;
-                updateAnswer('categoryDetails', details);
-              }}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500 mb-1 block">Smallest habit that moves you forward?</label>
-            <input 
-              type="text" 
-              className="w-full px-3 py-2 rounded-lg border border-gray-200"
-              placeholder="e.g. 10 min walk daily"
-              value={answers.categoryDetails?.[cat]?.habit || ''}
-              onChange={e => {
-                const details = { ...answers.categoryDetails };
-                details[cat] = { ...(details[cat] || {}), habit: e.target.value } as any;
-                updateAnswer('categoryDetails', details);
-              }}
-            />
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="text-xs font-bold text-gray-400 uppercase">Priority (1-10)</label>
+        <div key={cat} className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm space-y-6">
+          <h4 className="text-lg font-bold text-indigo-600 border-b border-gray-100 pb-2">{cat}</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-1 block">#1 Outcome for {cat}</label>
               <input 
-                type="range" min="1" max="10" 
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                type="text" 
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Vision statement..."
+                value={answers.categoryDetails?.[cat]?.outcome || ''}
+                onChange={e => {
+                  const details = { ...answers.categoryDetails };
+                  details[cat] = { ...(details[cat] || {}), outcome: e.target.value } as any;
+                  updateAnswer('categoryDetails', details);
+                }}
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-1 block">Target Date</label>
+              <input 
+                type="date" 
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                value={answers.categoryDetails?.[cat]?.targetDate || ''}
+                onChange={e => {
+                  const details = { ...answers.categoryDetails };
+                  details[cat] = { ...(details[cat] || {}), targetDate: e.target.value } as any;
+                  updateAnswer('categoryDetails', details);
+                }}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium text-gray-500 mb-1 block">Why is this important?</label>
+              <input 
+                type="text" 
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Your motivation..."
+                value={answers.categoryDetails?.[cat]?.why || ''}
+                onChange={e => {
+                  const details = { ...answers.categoryDetails };
+                  details[cat] = { ...(details[cat] || {}), why: e.target.value } as any;
+                  updateAnswer('categoryDetails', details);
+                }}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-1 block">Weekly habit?</label>
+              <input 
+                type="text" 
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="e.g. 15 mins daily"
+                value={answers.categoryDetails?.[cat]?.habit || ''}
+                onChange={e => {
+                  const details = { ...answers.categoryDetails };
+                  details[cat] = { ...(details[cat] || {}), habit: e.target.value } as any;
+                  updateAnswer('categoryDetails', details);
+                }}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-1 block">Biggest obstacle?</label>
+              <input 
+                type="text" 
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="What stands in your way?"
+                value={answers.categoryDetails?.[cat]?.obstacle || ''}
+                onChange={e => {
+                  const details = { ...answers.categoryDetails };
+                  details[cat] = { ...(details[cat] || {}), obstacle: e.target.value } as any;
+                  updateAnswer('categoryDetails', details);
+                }}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-1 block">Priority (1-10)</label>
+              <input 
+                type="range" min="1" max="10"
+                className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                 value={answers.categoryDetails?.[cat]?.priority || 5}
                 onChange={e => {
                   const details = { ...answers.categoryDetails };
@@ -157,15 +206,31 @@ export const Interview: React.FC<InterviewProps> = ({ onComplete }) => {
                 }}
               />
             </div>
-            <div className="flex-1">
-              <label className="text-xs font-bold text-gray-400 uppercase">Confidence (1-10)</label>
+
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-1 block">Confidence (1-10)</label>
               <input 
-                type="range" min="1" max="10" 
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                type="range" min="1" max="10"
+                className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                 value={answers.categoryDetails?.[cat]?.confidence || 5}
                 onChange={e => {
                   const details = { ...answers.categoryDetails };
                   details[cat] = { ...(details[cat] || {}), confidence: parseInt(e.target.value) } as any;
+                  updateAnswer('categoryDetails', details);
+                }}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium text-gray-500 mb-1 block">Support System</label>
+              <input 
+                type="text" 
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Tools, mentors, etc."
+                value={answers.categoryDetails?.[cat]?.support || ''}
+                onChange={e => {
+                  const details = { ...answers.categoryDetails };
+                  details[cat] = { ...(details[cat] || {}), support: e.target.value } as any;
                   updateAnswer('categoryDetails', details);
                 }}
               />
@@ -177,8 +242,9 @@ export const Interview: React.FC<InterviewProps> = ({ onComplete }) => {
 
     // Step 3: Reality Check
     <div key="step-3" className="space-y-6">
+      <h3 className="text-xl font-semibold text-gray-800">Constraints & Reality Check</h3>
       <div>
-        <label className="block text-lg font-medium text-gray-700 mb-2">How many hours per week can you invest in yourself?</label>
+        <label className="block text-lg font-medium text-gray-700 mb-2">Hours per week for self-investment?</label>
         <div className="flex items-center gap-4">
           <input 
             type="range" min="1" max="40" 
@@ -193,114 +259,68 @@ export const Interview: React.FC<InterviewProps> = ({ onComplete }) => {
         <label className="block text-lg font-medium text-gray-700 mb-2">What must you protect?</label>
         <input 
           type="text" 
-          placeholder="e.g. My morning peace, family dinners..."
-          className="w-full px-4 py-3 rounded-xl border border-gray-300 outline-none"
+          placeholder="e.g. Time, Family, Peace..."
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 outline-none focus:ring-2 focus:ring-indigo-500"
           value={answers.protectionList || ''}
           onChange={e => updateAnswer('protectionList', e.target.value)}
         />
       </div>
       <div>
-        <label className="block text-lg font-medium text-gray-700 mb-2">What should you say NO to in 2026?</label>
+        <label className="block text-lg font-medium text-gray-700 mb-2">What will you say NO to?</label>
         <input 
           type="text" 
-          placeholder="e.g. Aimless scrolling, over-commitment..."
-          className="w-full px-4 py-3 rounded-xl border border-gray-300 outline-none"
+          placeholder="e.g. Scrolling, over-commitment..."
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 outline-none focus:ring-2 focus:ring-indigo-500"
           value={answers.sayNoTo || ''}
           onChange={e => updateAnswer('sayNoTo', e.target.value)}
         />
       </div>
     </div>,
 
-    // Step 4: Motivation
+    // Step 4: Motivation & Emotions
     <div key="step-4" className="space-y-6">
+       <h3 className="text-xl font-semibold text-gray-800">Motivation & Emotional Anchor</h3>
        <div>
-        <label className="block text-lg font-medium text-gray-700 mb-2">Describe a perfect day in your 2026 life</label>
+        <label className="block text-lg font-medium text-gray-700 mb-2">Describe a perfect day in 2026</label>
         <textarea 
-          placeholder="Waking up at 6am to the sound of..."
-          className="w-full px-4 py-3 rounded-xl border border-gray-300 h-24"
+          placeholder="I wake up at..."
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 h-24 focus:ring-2 focus:ring-indigo-500 outline-none"
           value={answers.perfectDay || ''}
           onChange={e => updateAnswer('perfectDay', e.target.value)}
         />
       </div>
       <div>
-        <label className="block text-lg font-medium text-gray-700 mb-2">What emotion do you want to feel most often?</label>
+        <label className="block text-lg font-medium text-gray-700 mb-2">Emotion to feel most often?</label>
         <input 
           type="text" 
           placeholder="e.g. Radiant energy, deep calm..."
-          className="w-full px-4 py-3 rounded-xl border border-gray-300 outline-none"
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 outline-none focus:ring-2 focus:ring-indigo-500"
           value={answers.targetEmotion || ''}
           onChange={e => updateAnswer('targetEmotion', e.target.value)}
         />
       </div>
-    </div>,
-
-    // Step 5: Visual Prefs
-    <div key="step-5" className="space-y-6">
       <div>
-        <label className="block text-lg font-medium text-gray-700 mb-2">Pick a visual vibe</label>
-        <div className="flex flex-wrap gap-2">
-          {VIBES.map(v => (
-            <button
-              key={v}
-              onClick={() => updateAnswer('visualVibe', v)}
-              className={`px-4 py-2 rounded-full border transition-all ${
-                answers.visualVibe === v
-                  ? 'bg-indigo-600 border-indigo-600 text-white' 
-                  : 'bg-white border-gray-300 text-gray-600 hover:border-indigo-400'
-              }`}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label className="block text-lg font-medium text-gray-700 mb-2">Image style</label>
-        <div className="flex flex-wrap gap-2">
-          {STYLES.map(s => (
-            <button
-              key={s}
-              onClick={() => updateAnswer('imageStyle', s)}
-              className={`px-4 py-2 rounded-full border transition-all ${
-                answers.imageStyle === s
-                  ? 'bg-emerald-600 border-emerald-600 text-white' 
-                  : 'bg-white border-gray-300 text-gray-600 hover:border-emerald-400'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label className="block text-lg font-medium text-gray-700 mb-2">Board layout preference</label>
-        <div className="flex gap-4">
-          <button 
-            onClick={() => updateAnswer('layoutStyle', 'clean')}
-            className={`flex-1 py-4 rounded-xl border text-center font-medium ${answers.layoutStyle === 'clean' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white'}`}
-          >
-            Clean Grid
-          </button>
-          <button 
-            onClick={() => updateAnswer('layoutStyle', 'messy')}
-            className={`flex-1 py-4 rounded-xl border text-center font-medium ${answers.layoutStyle === 'messy' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white'}`}
-          >
-            Messy Scrapbook
-          </button>
-        </div>
+        <label className="block text-lg font-medium text-gray-700 mb-2">One fear you're willing to outgrow?</label>
+        <input 
+          type="text" 
+          placeholder="e.g. Fear of failure, social anxiety..."
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 outline-none focus:ring-2 focus:ring-indigo-500"
+          value={answers.fearToOutgrow || ''}
+          onChange={e => updateAnswer('fearToOutgrow', e.target.value)}
+        />
       </div>
     </div>
   ];
 
   const canProgress = () => {
-    if (step === 0) return answers.title2026 && (answers.themeWords?.length || 0) >= 1;
+    if (step === 0) return !!answers.title2026 && (answers.themeWords?.length || 0) >= 1;
     if (step === 1) return (answers.selectedCategories?.length || 0) >= 1;
     if (step === 2) return isCategoryComplete;
     return true;
   };
 
   return (
-    <div className="max-w-2xl mx-auto py-12 px-6">
+    <div className="max-w-3xl mx-auto py-12 px-6">
       <div className="mb-8">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm font-bold text-indigo-600 tracking-wider uppercase">Step {step + 1} of {steps.length}</span>
